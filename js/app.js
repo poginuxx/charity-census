@@ -207,7 +207,10 @@ function renderTray(baseline) {
       </div>
     </div>`;
 
-  document.querySelectorAll('[data-row]').forEach((cb) => {
+  // Scoped to #intake-result: the census board (a hidden tab, not unmounted)
+  // can simultaneously have its own [data-row] checkboxes open for a card
+  // correction — a document-wide selector here would wire up the wrong rows.
+  document.querySelectorAll('#intake-result [data-row]').forEach((cb) => {
     cb.addEventListener('change', () => {
       rows[Number(cb.dataset.row)].apply = cb.checked;
     });
@@ -220,6 +223,14 @@ function renderTray(baseline) {
 
 // View state only — never persisted, never written by the parser.
 const boardState = { staleOnly: false, resident: '', grouped: true };
+
+// Manual field correction (spec-adjacent addition): at most one card is
+// ever in edit mode at a time. `editingCardId` = showing the input form;
+// `cardEditReview` = form submitted, showing the proposed diff for
+// confirmation — same two-step "nothing changes without review" shape as
+// the intake tray, just scoped to one card instead of a whole message.
+let editingCardId = null;
+let cardEditReview = null; // { cardId, rows }
 
 function nihssTrendHtml(card) {
   const latest = latestNihss(card);
@@ -273,6 +284,9 @@ function cardDetailsHtml(card) {
 }
 
 function censusCardHtml(card, nowMs) {
+  if (cardEditReview?.cardId === card.id) return cardEditReviewHtml(card);
+  if (editingCardId === card.id) return cardEditFormHtml(card);
+
   const triage = computeTriage(card);
   const hours = hoursSinceUpdate(card, nowMs);
   const stale = isStale(card, nowMs);
@@ -300,10 +314,122 @@ function censusCardHtml(card, nowMs) {
         <details class="card-details"><summary>Details</summary>${cardDetailsHtml(card)}</details>
       </div>
       <div class="card-actions">
+        <button class="btn tiny" data-edit-card="${esc(card.id)}">Edit</button>
         <button class="btn tiny" data-archive="${esc(card.id)}" data-reason="discharged">Discharged</button>
         <button class="btn tiny" data-archive="${esc(card.id)}" data-reason="transferred">Transferred</button>
       </div>
     </div>`;
+}
+
+// Manual correction, step 1: a plain form pre-filled with the card's
+// current snapshot values. Deliberately limited to snapshot fields (ward,
+// RIC, referred-by, vitals, motor exam) — NIHSS/labs are trend histories,
+// and editing a past reading is a different, more delicate operation than
+// fixing a garbled current value, so it's left out of this feature.
+function cardEditFormHtml(card) {
+  const v = card.vitals ?? {};
+  const m = card.motor ?? {};
+  const id = esc(card.id);
+  const field = (fieldId, label, value, type = 'text') => `
+    <label class="edit-field">
+      <span>${label}</span>
+      <input type="${type}" id="edit-${fieldId}-${id}" value="${esc(value ?? '')}">
+    </label>`;
+
+  return `
+    <div class="patient-card edit-card">
+      <div class="card-top">
+        <strong>${esc(card.identity.name)}</strong>
+        <span>(${esc(card.identity.age)}/${esc(card.identity.sex)})</span>
+        <span class="fine-print">— editing</span>
+      </div>
+      <p class="fine-print">Correcting a value here doesn't count as a new
+      referral — it won't move the "last updated" clock, and you'll still
+      review the change before it's saved.</p>
+      <div class="edit-grid">
+        ${field('ward', 'Ward', card.ward)}
+        ${field('ric', 'RIC', card.assignedResident)}
+        ${field('referredby', 'Referred by', card.referredBy)}
+        ${field('bp', 'BP', v.bp)}
+        ${field('hr', 'HR', v.hr, 'number')}
+        ${field('rr', 'RR', v.rr, 'number')}
+        ${field('temp', 'Temp', v.temp, 'number')}
+        ${field('o2', 'O2 %', v.o2, 'number')}
+        ${field('o2note', 'O2 note', v.o2Note)}
+        ${field('gcstotal', 'GCS total', v.gcsTotal, 'number')}
+        ${field('gcsbreakdown', 'GCS breakdown', v.gcsBreakdown)}
+        ${field('rue', 'Motor RUE', m.rue)}
+        ${field('lue', 'Motor LUE', m.lue)}
+        ${field('rle', 'Motor RLE', m.rle)}
+        ${field('lle', 'Motor LLE', m.lle)}
+      </div>
+      <label class="labs-toggle">
+        <input type="checkbox" id="edit-tempurgent-${id}" ${v.tempUrgent ? 'checked' : ''}>
+        ‼️ Flag temperature as urgent
+      </label>
+      <div class="tray-actions">
+        <button class="btn primary" data-review-edit="${id}">Review changes</button>
+        <button class="btn" data-cancel-edit="${id}">Cancel</button>
+      </div>
+    </div>`;
+}
+
+// Manual correction, step 2: the proposed changes as the exact same
+// old-value/new-value tray rows the intake flow uses — same review
+// discipline, same per-row toggles, just triggered from a card instead of
+// a pasted message.
+function cardEditReviewHtml(card) {
+  const { rows } = cardEditReview;
+  return `
+    <div class="patient-card edit-card">
+      <div class="card-top">
+        <strong>${esc(card.identity.name)}</strong>
+        <span>(${esc(card.identity.age)}/${esc(card.identity.sex)})</span>
+        <span class="fine-print">— reviewing correction</span>
+      </div>
+      ${rows.length === 0
+        ? '<p class="empty-state">No changes from what\'s already on the card.</p>'
+        : rows.map(trayRowHtml).join('')}
+      <div class="tray-actions">
+        <button class="btn primary" data-confirm-edit="${esc(card.id)}" ${rows.length === 0 ? 'disabled' : ''}>
+          Confirm correction</button>
+        <button class="btn" data-cancel-review-edit="${esc(card.id)}">Back</button>
+      </div>
+    </div>`;
+}
+
+function readEditForm(card) {
+  const id = card.id;
+  const raw = (fieldId) => document.getElementById(`edit-${fieldId}-${id}`)?.value.trim() ?? '';
+  const str = (fieldId) => { const v = raw(fieldId); return v === '' ? null : v; };
+  const num = (fieldId) => { const v = raw(fieldId); return v === '' ? null : Number(v); };
+
+  const rue = str('rue'), lue = str('lue'), rle = str('rle'), lle = str('lle');
+
+  return {
+    structuralMismatch: false,
+    identity: card.identity,
+    ward: str('ward'),
+    assignedResident: str('ric'),
+    referredBy: str('referredby'),
+    referralDateTime: null,
+    referralDateTimeRaw: null,
+    vitals: {
+      bp: str('bp'),
+      hr: num('hr'),
+      rr: num('rr'),
+      temp: num('temp'),
+      tempUrgent: document.getElementById(`edit-tempurgent-${id}`)?.checked ?? false,
+      o2: num('o2'),
+      o2Note: str('o2note'),
+      gcsTotal: num('gcstotal'),
+      gcsBreakdown: str('gcsbreakdown'),
+    },
+    motor: (rue || lue || rle || lle) ? { rue, lue, rle, lle } : null,
+    nihss: null,
+    labsStructured: null,
+    text: {},
+  };
 }
 
 function renderCensus() {
@@ -388,6 +514,59 @@ function renderCensus() {
       roster = archiveCard(roster, cardId, reason);
       saveRoster(roster);
       renderCensus();
+    });
+  });
+
+  // Manual field correction: form → review diff → confirm. Same
+  // two-step review discipline as the intake tray (spec invariant #3),
+  // just scoped to one card instead of a whole pasted message.
+  document.querySelectorAll('[data-edit-card]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      editingCardId = btn.dataset.editCard;
+      cardEditReview = null;
+      renderCensus();
+    });
+  });
+  document.querySelectorAll('[data-cancel-edit]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      editingCardId = null;
+      renderCensus();
+    });
+  });
+  document.querySelectorAll('[data-review-edit]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const cardId = btn.dataset.reviewEdit;
+      const card = roster.find((c) => c.id === cardId);
+      const correction = readEditForm(card);
+      const rows = buildTray(correction, card, { skipReferralTimestamp: true });
+      editingCardId = null;
+      cardEditReview = { cardId, rows };
+      renderCensus();
+    });
+  });
+  document.querySelectorAll('[data-cancel-review-edit]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      cardEditReview = null;
+      renderCensus();
+    });
+  });
+  document.querySelectorAll('[data-confirm-edit]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const cardId = btn.dataset.confirmEdit;
+      const card = roster.find((c) => c.id === cardId);
+      const committed = commitTray(card, cardEditReview.rows);
+      roster = roster.map((c) => (c.id === cardId ? committed : c));
+      saveRoster(roster);
+      cardEditReview = null;
+      renderCensus();
+    });
+  });
+  // Scoped to #census-list, mirroring the #intake-result scoping above —
+  // both this board and the intake tray can have [data-row] checkboxes
+  // present in the DOM at once (hidden tabs aren't unmounted).
+  document.querySelectorAll('#census-list [data-row]').forEach((cb) => {
+    cb.addEventListener('change', () => {
+      cardEditReview.rows[Number(cb.dataset.row)].apply = cb.checked;
     });
   });
 }

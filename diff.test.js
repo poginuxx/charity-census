@@ -123,6 +123,29 @@ test('deidentify: patient name and ward redacted, resident names kept', () => {
   assert.match(clean, /Cleo Casongsong/);
 });
 
+test('manual correction (skipReferralTimestamp) never touches lastReferralAt', () => {
+  const parsed = parseReferral(fixture('santos'));
+  let card = newCardShell(parsed.identity);
+  card = commitTray(card, buildTray(parsed, card));
+  const originalReferralAt = card.lastReferralAt;
+
+  // Simulate a manual correction: same shape as a parse result, but with
+  // just one field changed (correcting a typo'd BP) and no referral date.
+  const correction = {
+    ...parsed, referralDateTime: null, referralDateTimeRaw: null,
+    vitals: { ...parsed.vitals, bp: '130/85' },
+    nihss: null, labsStructured: null, text: {},
+  };
+  const rows = buildTray(correction, card, { skipReferralTimestamp: true });
+
+  assert.equal(row(rows, 'lastReferralAt'), undefined);
+  assert.ok(row(rows, 'vitals.bp'), 'the actual correction should still produce a row');
+
+  card = commitTray(card, rows);
+  assert.equal(card.vitals.bp, '130/85');
+  assert.equal(card.lastReferralAt, originalReferralAt, 'staleness clock must not move on a correction');
+});
+
 test('deidentify: long digit runs redacted, clinical values preserved', () => {
   const clean = deidentify('Case no. 2026114532\nBP: 180/80\nNa 130.80', null);
   assert.doesNotMatch(clean, /2026114532/);
