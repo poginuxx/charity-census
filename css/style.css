@@ -220,6 +220,7 @@ body {
 .chip.sev-bad { background: #fdeaea; color: var(--bad); }
 .chip.needs-eyes { background: var(--bad); color: #fff; }
 .chip.urgent { background: #fdeaea; color: var(--bad); border: 1px solid var(--bad); }
+.chip.inferred { background: var(--border); color: var(--text-muted); }
 
 /* ---------- census board ---------- */
 

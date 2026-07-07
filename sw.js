@@ -3,7 +3,7 @@
 // cache is only a safety net; we never want a stale app shell served over a
 // fresh one.
 
-const CACHE = 'charity-census-v4';
+const CACHE = 'charity-census-v5';
 const APP_SHELL = [
   './',
   './index.html',

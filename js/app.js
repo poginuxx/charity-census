@@ -160,6 +160,8 @@ function trayRowHtml(row, i) {
   const eyesBadge = row.needsEyes
     ? '<span class="chip needs-eyes">needs eyes</span>' : '';
   const urgent = row.urgentFlag ? '<span class="chip urgent">‼️ resident-flagged</span>' : '';
+  const inferredChip = row.inferred
+    ? '<span class="chip inferred">inferred, not stated</span>' : '';
 
   const oldPart = row.oldDisplay !== null && row.oldDisplay !== undefined
     ? `<span class="old-value">${esc(row.oldDisplay)}</span><span class="arrow">→</span>` : '';
@@ -174,7 +176,7 @@ function trayRowHtml(row, i) {
       <input type="checkbox" data-row="${i}" ${row.apply ? 'checked' : ''}>
       <span class="row-label">${esc(row.label)}</span>
       <span class="row-value">${valueHtml}</span>
-      <span class="row-chips">${urgent}${sevChip}${eyesBadge}</span>
+      <span class="row-chips">${urgent}${inferredChip}${sevChip}${eyesBadge}</span>
     </label>`;
 }
 
@@ -254,9 +256,11 @@ function cardDetailsHtml(card) {
     .map((k) => `<p><strong>${k.toUpperCase()}</strong></p><ul>${historyListHtml(card.labsHistory[k])}</ul>`)
     .join('');
   const textBlocks = Object.entries({
-    assessment: 'Assessment', history: 'History', physicalExam: 'Physical exam',
-    neuroExam: 'Neuro exam', labsImaging: 'Labs & imaging', meds: 'Meds on board',
-    plans: 'Plans',
+    assessment: card.text?.assessmentLabel ?? 'Assessment',
+    history: card.text?.historyLabel ?? 'History',
+    vitals: card.text?.vitalsLabel ?? 'Vitals (verbatim)',
+    physicalExam: 'Physical exam', neuroExam: 'Neuro exam',
+    labsImaging: 'Labs & imaging', meds: 'Meds on board', plans: 'Plans',
   })
     .filter(([k]) => card.text?.[k])
     .map(([k, label]) => `<p><strong>${label}</strong></p><pre>${esc(card.text[k])}</pre>`)
