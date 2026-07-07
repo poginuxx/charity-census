@@ -1,0 +1,8 @@
+{
+  "name": "charity-census",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}

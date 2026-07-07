@@ -1,0 +1,5 @@
+# Real referral text used only for local regression testing — never
+# published. Contains real resident names, wards, and clinical details.
+fixtures/
+
+.DS_Store
