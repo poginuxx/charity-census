@@ -3,7 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#0f5c5a">
+  <meta name="theme-color" content="#0f5c5a" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0a3231" media="(prefers-color-scheme: dark)">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Census">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Charity Census</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
@@ -13,39 +17,55 @@
 <body>
   <header class="app-header">
     <h1>Charity Census</h1>
-    <nav class="tabs" id="tabs">
-      <button class="tab active" data-view="census">Census</button>
-      <button class="tab" data-view="intake">Intake</button>
-      <button class="tab" data-view="archive">Archive</button>
+    <nav class="tabs" id="tabs" role="tablist" aria-label="App sections">
+      <button class="tab active" role="tab" aria-selected="true" aria-controls="view-census" data-view="census">Census</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="view-intake" data-view="intake">Intake</button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="view-archive" data-view="archive">Archive</button>
     </nav>
   </header>
 
+  <div id="install-banner" class="install-banner" hidden>
+    <span id="install-text">Install this app for one-tap access from your home screen.</span>
+    <button id="install-action" class="btn small primary" hidden>Install</button>
+    <button id="install-dismiss" class="btn small" aria-label="Dismiss install suggestion">Not now</button>
+  </div>
+
   <div class="backup-bar">
-    <button id="export-btn" class="btn small">⬇ Export backup</button>
-    <button id="import-btn" class="btn small">⬆ Import backup</button>
+    <button id="export-btn" class="btn small"><span aria-hidden="true">⬇</span> Export backup</button>
+    <button id="import-btn" class="btn small"><span aria-hidden="true">⬆</span> Import backup</button>
     <input type="file" id="import-file" accept="application/json" hidden>
-    <span id="backup-status" class="fine-print"></span>
+    <span id="backup-status" class="fine-print" role="status" aria-live="polite"></span>
   </div>
 
   <main id="main">
-    <section id="view-census" class="view active">
+    <section id="view-census" class="view active" role="tabpanel" aria-label="Census">
       <div id="census-list"></div>
     </section>
 
-    <section id="view-intake" class="view">
-      <textarea id="paste-box" rows="10"
+    <section id="view-intake" class="view" role="tabpanel" aria-label="Intake">
+      <textarea id="paste-box" rows="10" aria-label="Referral message"
         placeholder="Paste a NeuroReferral message from Viber here…"></textarea>
       <div class="intake-actions">
         <button id="parse-btn" class="btn primary">Parse referral</button>
         <button id="reset-btn" class="btn">Clear</button>
       </div>
-      <div id="intake-result"></div>
+      <div id="intake-result" aria-live="polite"></div>
     </section>
 
-    <section id="view-archive" class="view">
+    <section id="view-archive" class="view" role="tabpanel" aria-label="Archive">
       <div id="archive-list"></div>
     </section>
   </main>
+
+  <dialog id="confirm-dialog" class="confirm-dialog">
+    <form method="dialog">
+      <p id="confirm-message"></p>
+      <div class="prompt-actions">
+        <button value="confirm" id="confirm-ok" class="btn primary">Confirm</button>
+        <button value="cancel" class="btn">Cancel</button>
+      </div>
+    </form>
+  </dialog>
 
   <script type="module" src="js/app.js"></script>
 </body>

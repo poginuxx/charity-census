@@ -22,6 +22,44 @@ let pending = null;
 
 const $ = (sel) => document.querySelector(sel);
 
+// In-page replacement for confirm(): <dialog> gives us focus trapping and
+// Esc-to-cancel for free, and doesn't look like a browser popup inside the
+// installed app. Esc/cancel resolves false (returnValue stays '').
+function confirmDialog(message, okLabel = 'Confirm') {
+  const dlg = $('#confirm-dialog');
+  const okBtn = $('#confirm-ok');
+  const cancelBtn = dlg.querySelector('[value="cancel"]');
+  $('#confirm-message').textContent = message;
+  okBtn.textContent = okLabel;
+
+  return new Promise((resolve) => {
+    // Resolve from the button clicks themselves — some Chromium builds
+    // (e.g. Electron) close a method="dialog" form without ever firing the
+    // dialog's close event. close/cancel stay wired as the Esc-key path.
+    let settled = false;
+    const done = (result) => {
+      if (settled) return;
+      settled = true;
+      okBtn.removeEventListener('click', onOk);
+      cancelBtn.removeEventListener('click', onCancel);
+      dlg.removeEventListener('close', onClose);
+      dlg.removeEventListener('cancel', onCancel);
+      if (dlg.open) dlg.close();
+      resolve(result);
+    };
+    const onOk = () => done(true);
+    const onCancel = () => done(false);
+    const onClose = () => done(dlg.returnValue === 'confirm');
+
+    okBtn.addEventListener('click', onOk);
+    cancelBtn.addEventListener('click', onCancel);
+    dlg.addEventListener('close', onClose);
+    dlg.addEventListener('cancel', onCancel);
+    dlg.returnValue = '';
+    dlg.showModal();
+  });
+}
+
 function esc(s) {
   return String(s ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -507,10 +545,14 @@ function renderCensus() {
   // Discharge/transfer archives the card (never deletes it) — reversible
   // from the Archive tab if this was a mis-click.
   document.querySelectorAll('[data-archive]').forEach((btn) => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const { archive: cardId, reason } = btn.dataset;
       const card = roster.find((c) => c.id === cardId);
-      if (!confirm(`Mark ${card.identity.name} as ${reason}? You can restore this from the Archive tab.`)) return;
+      const ok = await confirmDialog(
+        `Mark ${card.identity.name} as ${reason}? You can restore this from the Archive tab.`,
+        `Mark ${reason}`
+      );
+      if (!ok) return;
       roster = archiveCard(roster, cardId, reason);
       saveRoster(roster);
       renderCensus();
@@ -651,11 +693,13 @@ function onImportFile(e) {
   if (!file) return;
 
   const reader = new FileReader();
-  reader.onload = () => {
-    if (!confirm(
+  reader.onload = async () => {
+    const ok = await confirmDialog(
       'Importing replaces the ENTIRE current census with this backup file. ' +
-      'This cannot be undone unless you have another backup. Continue?'
-    )) return;
+      'This cannot be undone unless you have another backup. Continue?',
+      'Replace census'
+    );
+    if (!ok) return;
     try {
       roster = importRoster(reader.result);
       saveRoster(roster);
@@ -672,16 +716,71 @@ function onImportFile(e) {
 /* ---------- shell ---------- */
 
 function initTabs() {
-  const tabs = document.querySelectorAll('.tab');
-  tabs.forEach((tab) => {
-    tab.addEventListener('click', () => {
-      tabs.forEach((t) => t.classList.remove('active'));
-      document.querySelectorAll('.view').forEach((v) => v.classList.remove('active'));
-      tab.classList.add('active');
-      document.getElementById(`view-${tab.dataset.view}`).classList.add('active');
-      if (tab.dataset.view === 'archive') renderArchive();
-      if (tab.dataset.view === 'census') renderCensus();
+  const tabs = [...document.querySelectorAll('.tab')];
+
+  function activate(tab) {
+    tabs.forEach((t) => {
+      t.classList.remove('active');
+      t.setAttribute('aria-selected', 'false');
     });
+    document.querySelectorAll('.view').forEach((v) => v.classList.remove('active'));
+    tab.classList.add('active');
+    tab.setAttribute('aria-selected', 'true');
+    document.getElementById(`view-${tab.dataset.view}`).classList.add('active');
+    if (tab.dataset.view === 'archive') renderArchive();
+    if (tab.dataset.view === 'census') renderCensus();
+  }
+
+  tabs.forEach((tab, i) => {
+    tab.addEventListener('click', () => activate(tab));
+    tab.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+      const next = tabs[(i + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+      next.focus();
+      activate(next);
+    });
+  });
+}
+
+// "Add to Home Screen": Chromium fires beforeinstallprompt, so we stash the
+// event and offer a real Install button. iOS Safari never fires it — there
+// we show the manual Share → Add to Home Screen path instead. Either way
+// the banner is one-time: dismissing it is remembered, and it never shows
+// once the app is already running standalone.
+function initInstallPrompt() {
+  const DISMISS_KEY = 'census-install-dismissed';
+  const banner = $('#install-banner');
+  const installed =
+    matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  if (installed || localStorage.getItem(DISMISS_KEY)) return;
+
+  let deferredPrompt = null;
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    $('#install-action').hidden = false;
+    banner.hidden = false;
+  });
+
+  if (/iphone|ipad|ipod/i.test(navigator.userAgent)) {
+    $('#install-text').textContent =
+      'Add this app to your home screen: tap Share, then “Add to Home Screen”.';
+    banner.hidden = false;
+  }
+
+  $('#install-action').addEventListener('click', async () => {
+    banner.hidden = true;
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    if (outcome === 'dismissed') localStorage.setItem(DISMISS_KEY, '1');
+  });
+
+  $('#install-dismiss').addEventListener('click', () => {
+    banner.hidden = true;
+    localStorage.setItem(DISMISS_KEY, '1');
   });
 }
 
@@ -694,6 +793,7 @@ function registerServiceWorker() {
 }
 
 initTabs();
+initInstallPrompt();
 registerServiceWorker();
 renderCensus();
 $('#parse-btn').addEventListener('click', onParse);

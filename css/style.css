@@ -11,8 +11,36 @@
 
   /* severity classes (spec §5) */
   --good: #2e7d32;
-  --warn: #b26a00;
+  --warn: #8a5300;
   --bad: #c62828;
+  --good-bg: #e5f2e6;
+  --warn-bg: #fdf3e3;
+  --bad-bg: #fdeaea;
+
+  /* Declared per-theme (not "light dark") so UA form controls and scrollbars
+     always match the palette the media query actually resolved to. */
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --teal: #0d4d4b;
+    --teal-dark: #9fd4d2;
+    --bg: #101817;
+    --card: #1a2423;
+    --text: #e4ecec;
+    --text-muted: #93a7a7;
+    --border: #31403f;
+
+    --good: #7cc47f;
+    --warn: #e0a94f;
+    --bad: #ef8a8a;
+    --good-bg: #1c3320;
+    --warn-bg: #3a2d13;
+    --bad-bg: #3d1d1d;
+
+    color-scheme: dark;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -22,12 +50,45 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background: var(--bg);
   color: var(--text);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+main {
+  max-width: 46rem;
+  margin-inline: auto;
+}
+
+:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+.app-header :focus-visible { outline-color: #fff; }
+
+input[type="checkbox"] {
+  width: 1.25rem;
+  height: 1.25rem;
+  accent-color: var(--teal);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .btn, .tab {
+    transition: background-color 0.15s ease, border-color 0.15s ease,
+      color 0.15s ease, opacity 0.15s ease;
+  }
+  .btn:active { transform: scale(0.97); }
+  .view.active { animation: view-in 0.18s ease; }
+  @keyframes view-in {
+    from { opacity: 0.4; transform: translateY(3px); }
+    to { opacity: 1; transform: none; }
+  }
 }
 
 .app-header {
   background: var(--teal);
   color: #fff;
-  padding: 0.75rem 1rem 0;
+  padding: calc(env(safe-area-inset-top) + 0.75rem) 1rem 0;
   position: sticky;
   top: 0;
   z-index: 10;
@@ -48,9 +109,10 @@ body {
   appearance: none;
   border: none;
   background: transparent;
-  color: rgba(255, 255, 255, 0.75);
+  color: rgba(255, 255, 255, 0.85);
   font-size: 0.95rem;
   padding: 0.5rem 0.9rem;
+  min-height: 44px;
   border-radius: 8px 8px 0 0;
   cursor: pointer;
 }
@@ -60,6 +122,88 @@ body {
   color: var(--teal-dark);
   font-weight: 600;
 }
+
+/* Phone ergonomics: tabs move to a fixed bottom bar, in thumb reach. */
+@media (max-width: 640px) {
+  .app-header { padding-bottom: 0.75rem; }
+
+  .tabs {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--teal);
+    padding: 0.35rem max(0.5rem, env(safe-area-inset-right))
+      calc(0.35rem + env(safe-area-inset-bottom))
+      max(0.5rem, env(safe-area-inset-left));
+    gap: 0.35rem;
+    z-index: 20;
+    box-shadow: 0 -1px 0 rgba(0, 0, 0, 0.2);
+  }
+
+  .tab {
+    flex: 1;
+    min-height: 48px;
+    border-radius: 10px;
+    text-align: center;
+  }
+
+  .tab.active {
+    background: rgba(255, 255, 255, 0.16);
+    color: #fff;
+  }
+
+  /* Keep the last card scrollable above the fixed bar. */
+  main { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+}
+
+/* Floating snackbar, not in-flow: the banner appears whenever the browser
+   fires beforeinstallprompt (often seconds after load), and an in-flow bar
+   would shift the whole page down right as the user is about to tap. */
+.install-banner {
+  position: fixed;
+  left: 0.75rem;
+  right: 0.75rem;
+  bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 1rem;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  font-size: 0.9rem;
+}
+
+/* display: flex above beats the UA's [hidden] { display: none } — restate it */
+.install-banner[hidden] { display: none; }
+
+.install-banner span { flex: 1; min-width: 12rem; }
+
+@media (max-width: 640px) {
+  /* sit above the bottom tab bar */
+  .install-banner { bottom: calc(72px + env(safe-area-inset-bottom)); }
+}
+
+@media (min-width: 641px) {
+  .install-banner { left: auto; max-width: 26rem; }
+}
+
+.confirm-dialog {
+  border: 2px solid var(--teal);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--text);
+  max-width: min(24rem, calc(100vw - 2rem));
+  padding: 1rem 1.25rem;
+}
+
+.confirm-dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+
+.confirm-dialog p { margin-top: 0; }
 
 .backup-bar {
   display: flex;
@@ -85,11 +229,14 @@ body {
 
 #paste-box {
   width: 100%;
-  font: 0.9rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* 16px floor — anything smaller makes iOS Safari zoom in on focus */
+  font: 1rem/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
   padding: 0.75rem;
   border: 1px solid var(--border);
   border-radius: 8px;
   resize: vertical;
+  background: var(--card);
+  color: var(--text);
 }
 
 .intake-actions, .prompt-actions, .tray-actions {
@@ -106,6 +253,7 @@ body {
   color: var(--text);
   font-size: 0.95rem;
   padding: 0.5rem 1rem;
+  min-height: 48px;
   border-radius: 8px;
   cursor: pointer;
 }
@@ -119,8 +267,8 @@ body {
 
 .btn:disabled { opacity: 0.5; cursor: default; }
 
-.btn.small { padding: 0.35rem 0.7rem; font-size: 0.85rem; }
-.btn.tiny { padding: 0.3rem 0.6rem; font-size: 0.8rem; }
+.btn.small { padding: 0.35rem 0.7rem; font-size: 0.85rem; min-height: 44px; }
+.btn.tiny { padding: 0.3rem 0.6rem; font-size: 0.8rem; min-height: 44px; }
 
 .notice {
   padding: 0.75rem 1rem;
@@ -128,8 +276,8 @@ body {
   margin: 0.75rem 0;
 }
 
-.notice.success { background: #e5f2e6; border: 1px solid var(--good); }
-.notice.warn-box { background: #fdf3e3; border: 1px solid var(--warn); }
+.notice.success { background: var(--good-bg); border: 1px solid var(--good); }
+.notice.warn-box { background: var(--warn-bg); border: 1px solid var(--warn); }
 
 .fine-print { color: var(--text-muted); font-size: 0.85rem; }
 
@@ -215,11 +363,11 @@ body {
   white-space: nowrap;
 }
 
-.chip.sev-good { background: #e5f2e6; color: var(--good); }
-.chip.sev-warn { background: #fdf3e3; color: var(--warn); }
-.chip.sev-bad { background: #fdeaea; color: var(--bad); }
-.chip.needs-eyes { background: var(--bad); color: #fff; }
-.chip.urgent { background: #fdeaea; color: var(--bad); border: 1px solid var(--bad); }
+.chip.sev-good { background: var(--good-bg); color: var(--good); }
+.chip.sev-warn { background: var(--warn-bg); color: var(--warn); }
+.chip.sev-bad { background: var(--bad-bg); color: var(--bad); }
+.chip.needs-eyes { background: var(--bad); color: var(--card); }
+.chip.urgent { background: var(--bad-bg); color: var(--bad); border: 1px solid var(--bad); }
 .chip.inferred { background: var(--border); color: var(--text-muted); }
 
 /* ---------- census board ---------- */
@@ -235,27 +383,29 @@ body {
 .stale-btn.active {
   background: var(--bad);
   border-color: var(--bad);
-  color: #fff;
+  color: var(--card);
 }
 
 .stale-count {
   display: inline-block;
   background: var(--bad);
-  color: #fff;
+  color: var(--card);
   border-radius: 999px;
   padding: 0 0.5rem;
   font-weight: 700;
   margin-left: 0.25rem;
 }
 
-.stale-btn.active .stale-count { background: #fff; color: var(--bad); }
+.stale-btn.active .stale-count { background: var(--card); color: var(--bad); }
 
 #resident-filter {
-  font-size: 0.95rem;
+  font-size: 1rem; /* 16px floor: prevents iOS focus zoom */
   padding: 0.45rem 0.6rem;
+  min-height: 44px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--card);
+  color: var(--text);
 }
 
 .group-toggle { font-size: 0.9rem; color: var(--text-muted); }
@@ -296,7 +446,7 @@ body {
 }
 
 .age-badge.stale {
-  color: #fff;
+  color: var(--card);
   background: var(--bad);
   border-radius: 999px;
   padding: 0.1rem 0.55rem;
@@ -390,9 +540,11 @@ body {
 }
 
 .edit-field input {
-  font-size: 0.9rem;
+  font-size: 1rem; /* 16px floor: prevents iOS focus zoom */
   padding: 0.35rem 0.5rem;
+  min-height: 44px;
   border: 1px solid var(--border);
   border-radius: 6px;
+  background: var(--card);
   color: var(--text);
 }
