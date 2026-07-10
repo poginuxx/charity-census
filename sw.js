@@ -3,7 +3,7 @@
 // cache is only a safety net; we never want a stale app shell served over a
 // fresh one.
 
-const CACHE = 'charity-census-v6';
+const CACHE = 'charity-census-v8';
 const APP_SHELL = [
   './',
   './index.html',
@@ -18,6 +18,9 @@ const APP_SHELL = [
   './lib/triage.js',
   './manifest.webmanifest',
   './icons/icon.svg',
+  './icons/icon-maskable.svg',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
 ];
 
 self.addEventListener('install', (event) => {
@@ -41,10 +44,24 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        const copy = response.clone();
-        caches.open(CACHE).then((cache) => cache.put(event.request, copy));
+        // Only cache good responses — a cached 404/500 would otherwise be
+        // served forever once the network drops.
+        if (response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE).then((cache) => cache.put(event.request, copy));
+        }
         return response;
       })
-      .catch(() => caches.match(event.request))
+      .catch(async () => {
+        const cached = await caches.match(event.request);
+        if (cached) return cached;
+        // Offline navigation to an uncached URL: serve the app shell rather
+        // than letting respondWith reject into a browser error page.
+        if (event.request.mode === 'navigate') {
+          const shell = await caches.match('./index.html');
+          if (shell) return shell;
+        }
+        return Response.error();
+      })
   );
 });
